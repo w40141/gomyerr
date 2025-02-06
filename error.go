@@ -1,14 +1,15 @@
 // Package gomyerr provides a simple error handling package
+// TODO: add stack trace
+// TODO: add tags
+// TODO: test
 package gomyerr
 
 import "errors"
 
 // MyErr is a simple error struct
 type MyErr struct {
-	msg    string
 	origin error
 	cause  error
-	tags   map[string]interface{}
 }
 
 type origin struct {
@@ -36,7 +37,14 @@ func (e *MyErr) Error() string {
 
 // WithCause returns a new MyErr with the cause error
 func (e *MyErr) WithCause(cause error) *MyErr {
-	e.cause = From(cause)
+	if e.cause != nil {
+		e.cause = From(cause)
+	}
+	if _, ok := e.cause.(*MyErr); ok {
+		e = e.cause.(*MyErr).WithCause(cause)
+	} else {
+		e.cause = From(cause)
+	}
 	return e
 }
 
