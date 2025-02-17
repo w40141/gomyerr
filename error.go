@@ -4,81 +4,110 @@
 // TODO: test
 package gomyerr
 
-import "errors"
+import (
+	"fmt"
+	"runtime"
+)
 
-// MyErr is a simple error struct
-type MyErr struct {
-	origin error
-	cause  error
-}
+const maxStackDepth = 10
 
-type origin struct {
+type why struct {
 	msg string
 }
 
-func (e *origin) Error() string {
-	return e.msg
+// thisErrorWithStack is an error with a message, a cause, and a stack trace
+type thisErrorWithStack struct {
+	thisError
+	stackTrace []uintptr
 }
 
-// New returns a new MyErr
-func New(msg string) *MyErr {
-	return &MyErr{origin: &origin{msg: msg}}
+// thisError is an error with a message and a cause
+type thisError struct {
+	why   error
+	cause error
 }
 
-// From returns a new MyErr with the origin error
-func From(err error) *MyErr {
-	return &MyErr{origin: err}
+var (
+	_ error = (*why)(nil)
+	_ error = (*thisError)(nil)
+	_ error = (*thisErrorWithStack)(nil)
+)
+
+func (w why) Error() string {
+	return w.msg
 }
 
-// Error returns the error message
-func (e *MyErr) Error() string {
-	return e.origin.Error()
+// new returns a new ThisError
+func newWhy(msg string) why {
+	return why{msg: msg}
 }
 
-// WithCause returns a new MyErr with the cause error
-func (e *MyErr) WithCause(cause error) *MyErr {
-	if e.cause != nil {
-		e.cause = From(cause)
-	}
-	if _, ok := e.cause.(*MyErr); ok {
-		e = e.cause.(*MyErr).WithCause(cause)
-	} else {
-		e.cause = From(cause)
-	}
-	return e
+func newWhyf(format string, args ...any) why {
+	return newWhy(fmt.Sprintf(format, args...))
 }
 
-// Join returns a new MyErr with the origin error and the cause error
-func Join(origin error, err ...error) *MyErr {
-	e := From(origin)
-	if len(err) == 0 {
-		return e
-	}
-	return e.WithCause(Join(err[0], err[1:]...))
+// withCause returns a new ThisError with the cause error
+func (w why) withCause(cause error) thisError {
+	return thisError{why: w, cause: cause}
 }
 
-func (e *MyErr) Unwrap() error {
+// Format returns a new origin with the formatted message
+func Format(format string, args ...any) error {
+	return newWhyf(format, args...)
+}
+
+func (e thisError) Error() string {
+	return e.why.Error()
+}
+
+func (e thisError) Unwrap() error {
 	return e.cause
 }
 
-// Is returns true if the target error is the origin or the cause error
-func (e *MyErr) Is(target error) bool {
-	if errors.Is(e.origin, target) {
-		return true
-	}
-	if errors.Is(e.cause, target) {
-		return true
-	}
-	return false
+// Wrap returns a new ThisError with the cause error
+func Wrap(cause error, format string, args ...any) error {
+	return newWhyf(format, args...).withCause(cause)
 }
 
-// As returns true if the target is the origin or the cause error
-func (e *MyErr) As(target interface{}) bool {
-	if errors.As(e.origin, target) {
-		return true
+func (e thisError) withStack() thisErrorWithStack {
+	stack := make([]uintptr, maxStackDepth)
+	length := runtime.Callers(3, stack)
+	return thisErrorWithStack{thisError: e, stackTrace: stack[:length]}
+}
+
+// WrapStack returns a new ThisErrorWithStack with the cause error
+func WrapStack(cause error, format string, args ...any) error {
+	return newWhyf(format, args...).withCause(cause).withStack()
+}
+
+// Stack returns the stack trace
+func Stack(err error) []map[string]any {
+	if e, ok := err.(*thisErrorWithStack); ok {
+		return e.stack()
 	}
-	if errors.As(e.cause, target) {
-		return true
+	return nil
+}
+
+func (e thisErrorWithStack) stack() []map[string]any {
+	if len(e.stackTrace) == 0 {
+		if err, ok := e.cause.(*thisErrorWithStack); ok {
+			return err.stack()
+		}
+		return nil
 	}
-	return false
+
+	frames := runtime.CallersFrames(e.stackTrace)
+	stack := make([]map[string]any, 0, maxStackDepth)
+	for {
+		frame, more := frames.Next()
+		stack = append(stack, map[string]any{
+			"file":     frame.File,
+			"line":     frame.Line,
+			"function": frame.Function,
+		})
+		if !more {
+			break
+		}
+	}
+	return stack
 }

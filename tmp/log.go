@@ -23,7 +23,7 @@ func NewMyError(msg string) *MyError {
 		return &MyError{message: msg}
 	}
 	stack := make([]uintptr, maxDepth)
-	length := runtime.Callers(2, stack)
+	length := runtime.Callers(3, stack)
 	return &MyError{message: msg, stack: stack[:length]}
 }
 
