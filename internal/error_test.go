@@ -2,24 +2,18 @@ package internal
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 )
 
-func TestNewThisError(t *testing.T) {
-	origin := NewWhy("origin")
-	cause := NewWhy("cause")
-	err := NewThisError(origin, cause)
-	if err.Error() != "origin" {
-		t.Errorf("expected origin, got %s", err.Error())
-	}
-	if err.Unwrap().Error() != "cause" {
-		t.Errorf("expected cause, got %s", err.Unwrap().Error())
+func TestNewErr(t *testing.T) {
+	msg := "test"
+	err := NewErr(msg)
+	if err.Error() != msg {
+		t.Errorf("expected %s, got %s", msg, err.Error())
 	}
 }
 
-func TestFormatThisError(t *testing.T) {
-	cause := NewWhy("cause")
+func TestFormatErr(t *testing.T) {
 	tests := map[string]struct {
 		format string
 		args   []any
@@ -41,9 +35,10 @@ func TestFormatThisError(t *testing.T) {
 			want:   "test test 1",
 		},
 	}
+
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			actual := FormatThisError(cause, tt.format, tt.args...)
+			actual := FormatErr(tt.format, tt.args...)
 			if actual.Error() != tt.want {
 				t.Errorf("expected %s, got %s", tt.want, actual.Error())
 			}
@@ -51,49 +46,43 @@ func TestFormatThisError(t *testing.T) {
 	}
 }
 
-func TestThisErrorIs(t *testing.T) {
-	origin := NewWhy("origin")
-	origin2 := fmt.Errorf("origin")
-	cause := NewWhy("cause")
-	cause2 := fmt.Errorf("cause")
-
+func TestErrIs(t *testing.T) {
+	origin := NewErr("origin")
 	tests := map[string]struct {
-		err    *ThisError
+		why    error
 		target error
 		want   bool
 	}{
-		"whyがイコール": {
-			err:    NewThisError(origin, NewWhy("cause")),
+		"同じインスタンスは同一になる": {
+			why:    origin,
 			target: origin,
 			want:   true,
 		},
-		"whyがイコール2": {
-			err:    NewThisError(origin2, NewWhy("cause")),
-			target: origin2,
-			want:   true,
+		"異なるインタンスは同一ではない": {
+			why:    NewErr("origin"),
+			target: NewErr("origin"),
+			want:   false,
 		},
-		"causeがイコール": {
-			err:    NewThisError(NewWhy("origin"), cause),
-			target: cause,
-			want:   true,
+		"異なるメッセージは同一でない": {
+			why:    NewErr("origin"),
+			target: NewErr("cause"),
+			want:   false,
 		},
-		"causeがイコール2": {
-			err:    NewThisError(NewWhy("origin"), cause2),
-			target: cause2,
-			want:   true,
-		},
-		"ノットイコール": {
-			err:    NewThisError(NewWhy("origin"), NewWhy("cause")),
-			target: NewWhy("not equal"),
+		"異なるエラーは同一でない": {
+			why:    NewErr("origin"),
+			target: errors.New("cause"),
 			want:   false,
 		},
 	}
-
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if errors.Is(tt.err, tt.target) != tt.want {
-				t.Errorf("expected %t, got %t", tt.want, errors.Is(tt.err, tt.target))
+			if errors.Is(tt.why, tt.target) != tt.want {
+				t.Errorf("expected %t, got %t", tt.want, errors.Is(tt.why, tt.target))
 			}
 		})
 	}
+}
+
+// TODO: implement
+func TestWithStack(_ *testing.T) {
 }

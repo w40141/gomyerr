@@ -2,42 +2,72 @@
 package internal
 
 import (
-	"fmt"
-	"runtime"
+	"errors"
 )
 
-var _ error = (*Why)(nil)
+var (
+	_ error = (*Why)(nil)
+	_ error = (*Whys)(nil)
+)
 
-// Why is an error with a message
+// Why has a original error and a cause error
 type Why struct {
-	msg string
+	what error
+	why  error
 }
 
-func (w *Why) Error() string {
-	return w.msg
+// Whys has a original error and multiple causes
+type Whys struct {
+	why  error
+	whys []error
 }
 
-// NewWhy returns a new why error
-func NewWhy(msg string) *Why {
-	return &Why{msg: msg}
+// Wrap returns a new Why with the cause error
+func (e *What) Wrap(c error) *Why {
+	return &Why{what: e, why: c}
 }
 
-// FormatWhy returns a new why error with a formatted message
-func FormatWhy(format string, a ...any) *Why {
-	return NewWhy(fmt.Sprintf(format, a...))
+func (e *Why) Error() string {
+	return e.what.Error()
 }
 
-// WithStack returns a new ThisErrorWithStack with the current stack trace
-func (w *Why) WithStack() *ThisErrorWithStack {
-	stack := make([]uintptr, maxStackDepth)
-	length := runtime.Callers(3, stack)
-	return &ThisErrorWithStack{
-		ThisError:  ThisError{why: w},
-		stackTrace: stack[:length],
+func (e *Why) Unwrap() error {
+	return e.why
+}
+
+// Is reports whether the target error is the same as the current error
+func (e *Why) Is(target error) bool {
+	if errors.Is(e.what, target) || errors.Is(e.why, target) {
+		return true
 	}
+	return false
 }
 
-// WithCause returns a new ThisError with the cause error
-func (w *Why) WithCause(cause error) *ThisError {
-	return &ThisError{why: w, cause: cause}
+// Join returns a new Whys with the cause error
+func (e *Why) Join(err error) *Whys {
+	return &Whys{why: e.what, whys: []error{e.why, err}}
 }
+
+func (e *Whys) Error() string {
+	return e.why.Error()
+}
+
+func (e *Whys) Unwrap() []error {
+	return e.whys
+}
+
+// Join returns a new Whys with the cause errors
+func (e *Whys) Join(errs ...error) *Whys {
+	e.whys = append(e.whys, errs...)
+	return e
+}
+
+// NewWhy returns a new Why
+func NewWhy(what, why error) *Why {
+	return &Why{what: what, why: why}
+}
+
+// FormatMyErr returns a new Why with a formatted message
+// func FormatMyErr(why error, format string, a ...any) *Why {
+// 	return &Why{what: FormatWhat(format, a...), why: why}
+// }
